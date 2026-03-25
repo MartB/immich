@@ -6,7 +6,7 @@ import { NextFunction, RequestHandler } from 'express';
 import multer from 'multer';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { pipeline } from 'node:stream';
+import { pipeline, Transform } from 'node:stream';
 import { Observable } from 'rxjs';
 import { UploadFieldName } from 'src/dtos/asset-media.dto';
 import { RouteKey } from 'src/enum';
@@ -115,12 +115,15 @@ export class FileUploadInterceptor implements NestInterceptor {
 
       let size = 0;
 
-      file.stream.on('data', (chunk) => {
-        hash?.update(chunk);
-        size += chunk.length;
+      const hashTransform = new Transform({
+        transform(chunk, encoding, callback) {
+          hash?.update(chunk);
+          size += chunk.length;
+          callback(null, chunk);
+        },
       });
 
-      pipeline(file.stream, writeStream, (error) => {
+      pipeline(file.stream, hashTransform, writeStream, (error) => {
         if (error) {
           hash?.destroy();
           return callback(error);
